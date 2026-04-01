@@ -1,0 +1,54 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  farmerId     String   @unique
+  fullName     String
+  phone        String   @unique
+  email        String?  @unique
+  password     String
+  role         Role     @default(FARMER)
+  lga          String
+  village      String
+  farmSizeHa   Float?
+  createdAt    DateTime @default(now())
+  productions  Production[]
+}
+
+model Production {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  year            Int
+  season          String   // "Main" or "Dry"
+  productionTonnes Float
+  taxDue          Float
+  createdAt       DateTime @default(now())
+  payments        Payment[]
+}
+
+model Payment {
+  id            String    @id @default(uuid())
+  productionId  String
+  production    Production @relation(fields: [productionId], references: [id])
+  amount        Float
+  paymentDate   DateTime  @default(now())
+  reference     String?
+}
+
+model Setting {
+  id             String @id @default("tax_rate")
+  taxRatePerTonne Float  @default(7500)  // NGN per tonne (you can change)
+}
+
+enum Role {
+  FARMER
+  ADMIN
+}
