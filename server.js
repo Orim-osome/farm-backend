@@ -46,9 +46,10 @@ app.post('/api/register', async (req, res) => {
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, farmerId: user.farmerId, fullName: user.fullName, role: user.role } });
-  } catch (err) {
-    res.status(500).json({ error: "Registration failed" });
-  }
+  } catch (error) {
+  console.error(error);
+  res.status(500).json({ error: error.message }); 
+}
 });
 
 app.post('/api/login', async (req, res) => {
