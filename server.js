@@ -7,19 +7,15 @@ require('dotenv').config();
 
 const app = express();
 
-// --- ABSOLUTE FIRST MIDDLEWARE: Handle CORS for all routes and preflights ---
+// --- ABSOLUTE FIRST MIDDLEWARE: Handle CORS for all routes, previews, and preflights ---
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    'https://farmers-app-blond.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:5173'
-  ];
-  
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
+
+  // Dynamically match any .vercel.app domain (production or preview) or localhost
+  if (origin && (origin.endsWith('.vercel.app') || origin.includes('localhost'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://farmers-app-blond.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
