@@ -37,7 +37,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 const prisma = new PrismaClient();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // Healthcheck route
