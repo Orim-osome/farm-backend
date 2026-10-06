@@ -56,21 +56,41 @@ const authenticate = (req, res, next) => {
 app.post('/api/register', async (req, res) => {
   try {
     const { fullName, phone, email, password, lga, village, farmSizeHa } = req.body;
+    
+    if (!phone || !password || !fullName) {
+      return res.status(400).json({ error: "Missing required fields (fullName, phone, password)" });
+    }
+
     const hashed = await bcrypt.hash(password, 10);
 
     const lastFarmer = await prisma.user.findFirst({ orderBy: { farmerId: 'desc' } });
     const nextNum = lastFarmer && lastFarmer.farmerId ? parseInt(lastFarmer.farmerId.split('-')[1]) + 1 : 1;
     const farmerId = `CRYAM-${nextNum.toString().padStart(4, '0')}`;
 
+    // Fix: Cast farmSizeHa string to Float, or set to null if empty/undefined
+    const parsedFarmSize = farmSizeHa && !isNaN(parseFloat(farmSizeHa)) 
+      ? parseFloat(farmSizeHa) 
+      : null;
+
     const user = await prisma.user.create({
-      data: { farmerId, fullName, phone, email, password: hashed, role: 'FARMER', lga, village, farmSizeHa }
+      data: { 
+        farmerId, 
+        fullName, 
+        phone, 
+        email: email || null, 
+        password: hashed, 
+        role: 'FARMER', 
+        lga: lga || null, 
+        village: village || null, 
+        farmSizeHa: parsedFarmSize 
+      }
     });
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, farmerId: user.farmerId, fullName: user.fullName, role: user.role } });
   } catch (err) {
     console.error("Register Error:", err);
-    res.status(500).json({ error: "Registration failed" });
+    res.status(500).json({ error: "Registration failed", details: err.message });
   }
 });
 
