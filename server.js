@@ -6,18 +6,40 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(express.json());
+
+// Allowed origins setup
+const allowedOrigins = [
+  'https://farmers-app-blond.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
 
 app.use(cors({
-  origin: '*', 
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Express preflight handler
+app.options('*', cors());
+
+app.use(express.json());
+
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
+
+// Healthcheck route for Railway
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'healthy' });
+});
 
 const authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -37,7 +59,7 @@ app.post('/api/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
 
     const lastFarmer = await prisma.user.findFirst({ orderBy: { farmerId: 'desc' } });
-    const nextNum = lastFarmer ? parseInt(lastFarmer.farmerId.split('-')[1]) + 1 : 1;
+    const nextNum = lastFarmer && lastFarmer.farmerId ? parseInt(lastFarmer.farmerId.split('-')[1]) + 1 : 1;
     const farmerId = `CRYAM-${nextNum.toString().padStart(4, '0')}`;
 
     const user = await prisma.user.create({
@@ -47,23 +69,33 @@ app.post('/api/register', async (req, res) => {
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, farmerId: user.farmerId, fullName: user.fullName, role: user.role } });
   } catch (err) {
+    console.error("Register Error:", err);
     res.status(500).json({ error: "Registration failed" });
   }
 });
 
 app.post('/api/login', async (req, res) => {
-  const { phone, password } = req.body;
-  const user = await prisma.user.findUnique({ where: { phone } });
-  if (!user || !(await bcrypt.compare(password, user.password))) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+  try {
+    const { phone, password } = req.body;
+    const user = await prisma.user.findUnique({ where: { phone } });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user.id, farmerId: user.farmerId, fullName: user.fullName, role: user.role } });
+  } catch (err) {
+    console.error("Login Error:", err);
+    res.status(500).json({ error: "Login failed" });
   }
-  const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, farmerId: user.farmerId, fullName: user.fullName, role: user.role } });
 });
 
 app.get('/api/profile', authenticate, async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-  res.json(user);
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
 });
 
 app.post('/api/production', authenticate, async (req, res) => {
@@ -83,11 +115,15 @@ app.post('/api/production', authenticate, async (req, res) => {
 });
 
 app.get('/api/production', authenticate, async (req, res) => {
-  const prods = await prisma.production.findMany({
-    where: { userId: req.user.id },
-    include: { payments: true }
-  });
-  res.json(prods);
+  try {
+    const prods = await prisma.production.findMany({
+      where: { userId: req.user.id },
+      include: { payments: true }
+    });
+    res.json(prods);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch production records" });
+  }
 });
 
 app.post('/api/payment', authenticate, async (req, res) => {
@@ -104,37 +140,49 @@ app.post('/api/payment', authenticate, async (req, res) => {
 
 app.get('/api/admin/farmers', authenticate, async (req, res) => {
   if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
-  const farmers = await prisma.user.findMany({ where: { role: 'FARMER' } });
-  res.json(farmers);
+  try {
+    const farmers = await prisma.user.findMany({ where: { role: 'FARMER' } });
+    res.json(farmers);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch farmers' });
+  }
 });
 
 app.get('/api/admin/reports', authenticate, async (req, res) => {
   if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
   
-  const totalFarmers = await prisma.user.count({ where: { role: 'FARMER' } });
-  const totalProduction = await prisma.production.aggregate({ _sum: { productionTonnes: true } });
-  const totalTaxDue = await prisma.production.aggregate({ _sum: { taxDue: true } });
-  const totalCollected = await prisma.payment.aggregate({ _sum: { amount: true } });
+  try {
+    const totalFarmers = await prisma.user.count({ where: { role: 'FARMER' } });
+    const totalProduction = await prisma.production.aggregate({ _sum: { productionTonnes: true } });
+    const totalTaxDue = await prisma.production.aggregate({ _sum: { taxDue: true } });
+    const totalCollected = await prisma.payment.aggregate({ _sum: { amount: true } });
 
-  const byLga = await prisma.user.groupBy({
-    by: ['lga'],
-    _count: { id: true }
-  });
+    const byLga = await prisma.user.groupBy({
+      by: ['lga'],
+      _count: { id: true }
+    });
 
-  res.json({ 
-    totalFarmers, 
-    totalProduction: totalProduction._sum.productionTonnes || 0, 
-    totalTaxDue: totalTaxDue._sum.taxDue || 0, 
-    totalCollected: totalCollected._sum.amount || 0, 
-    byLga 
-  });
+    res.json({ 
+      totalFarmers, 
+      totalProduction: totalProduction._sum.productionTonnes || 0, 
+      totalTaxDue: totalTaxDue._sum.taxDue || 0, 
+      totalCollected: totalCollected._sum.amount || 0, 
+      byLga 
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate reports' });
+  }
 });
 
 app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
   if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
-  const { rate } = req.body;
-  await prisma.setting.update({ where: { id: 'tax_rate' }, data: { taxRatePerTonne: parseFloat(rate) } });
-  res.json({ message: 'Tax rate updated' });
+  try {
+    const { rate } = req.body;
+    await prisma.setting.update({ where: { id: 'tax_rate' }, data: { taxRatePerTonne: parseFloat(rate) } });
+    res.json({ message: 'Tax rate updated' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update tax rate' });
+  }
 });
 
 app.get('/api/admin/payments', authenticate, async (req, res) => {
@@ -152,4 +200,4 @@ app.get('/api/admin/payments', authenticate, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Server live on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server live on port ${PORT}`));
