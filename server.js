@@ -27,9 +27,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Express preflight handler
-app.options('*', cors());
-
 app.use(express.json());
 
 const prisma = new PrismaClient();
