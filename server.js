@@ -7,25 +7,33 @@ require('dotenv').config();
 
 const app = express();
 
-// Allowed origins setup
+// 1. Explicitly list all allowed origin formats
 const allowedOrigins = [
   'https://farmers-app-blond.vercel.app',
+  'https://farmers-app-blond.vercel.app/',
   'http://localhost:3000',
   'http://localhost:5173'
 ];
 
+// 2. Configure CORS middleware
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// 3. Handle preflight requests for all endpoints
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', req.headers.origin || 'https://farmers-app-blond.vercel.app');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 app.use(express.json());
 
