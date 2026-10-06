@@ -7,31 +7,30 @@ require('dotenv').config();
 
 const app = express();
 
-// 1. Explicitly list all allowed origin formats
-const allowedOrigins = [
-  'https://farmers-app-blond.vercel.app',
-  'https://farmers-app-blond.vercel.app/',
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
-
-// 2. Configure CORS middleware
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// 3. Handle preflight requests for all endpoints
+// --- ABSOLUTE FIRST MIDDLEWARE: Handle CORS for all routes and preflights ---
 app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || 'https://farmers-app-blond.vercel.app');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    return res.sendStatus(204);
+  const allowedOrigins = [
+    'https://farmers-app-blond.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://farmers-app-blond.vercel.app');
   }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Immediately answer preflight OPTIONS requests with 200 OK
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   next();
 });
 
@@ -41,7 +40,7 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Healthcheck route for Railway
+// Healthcheck route
 app.get('/', (req, res) => {
   res.status(200).json({ status: 'healthy' });
 });
