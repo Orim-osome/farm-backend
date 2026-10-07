@@ -194,14 +194,35 @@ app.get('/api/admin/reports', authenticate, async (req, res) => {
   }
 });
 
-app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
-  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+app.put('/api/admin/tax-rate', async (req, res) => {
   try {
-    const { rate } = req.body;
-    await prisma.setting.update({ where: { id: 'tax_rate' }, data: { taxRatePerTonne: parseFloat(rate) } });
-    res.json({ message: 'Tax rate updated' });
+    const { taxRatePerTonne } = req.body;
+    
+    if (taxRatePerTonne === undefined || isNaN(parseFloat(taxRatePerTonne))) {
+      return res.status(400).json({ error: "Invalid tax rate value provided" });
+    }
+
+    const rate = parseFloat(taxRatePerTonne);
+
+    // Get the first setting row, or create one if none exists
+    const existingSetting = await prisma.setting.findFirst();
+
+    let updatedSetting;
+    if (existingSetting) {
+      updatedSetting = await prisma.setting.update({
+        where: { id: existingSetting.id },
+        data: { taxRatePerTonne: rate }
+      });
+    } else {
+      updatedSetting = await prisma.setting.create({
+        data: { taxRatePerTonne: rate }
+      });
+    }
+
+    res.json({ message: "Tax rate updated successfully", setting: updatedSetting });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update tax rate' });
+    console.error("Tax Rate Update Error:", err);
+    res.status(500).json({ error: "Failed to update tax rate", details: err.message });
   }
 });
 
