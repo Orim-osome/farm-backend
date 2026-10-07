@@ -196,15 +196,14 @@ app.get('/api/admin/reports', authenticate, async (req, res) => {
 
 app.put('/api/admin/tax-rate', async (req, res) => {
   try {
+    console.log("Received Tax Rate Payload:", req.body);
     const { taxRatePerTonne } = req.body;
     
-    if (taxRatePerTonne === undefined || isNaN(parseFloat(taxRatePerTonne))) {
-      return res.status(400).json({ error: "Invalid tax rate value provided" });
+    const rate = parseFloat(taxRatePerTonne);
+    if (taxRatePerTonne === undefined || taxRatePerTonne === null || isNaN(rate)) {
+      return res.status(400).json({ error: "Invalid or missing taxRatePerTonne value" });
     }
 
-    const rate = parseFloat(taxRatePerTonne);
-
-    // Get the first setting row, or create one if none exists
     const existingSetting = await prisma.setting.findFirst();
 
     let updatedSetting;
