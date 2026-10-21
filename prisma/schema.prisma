@@ -45,7 +45,7 @@ model Payment {
 
 model Setting {
   id             String @id @default("tax_rate")
-  taxRatePerTonne Float  @default(7500)  // NGN per tonne (you can change)
+  fixedTaxAmount Float  @default(5000)  // Fixed NGN tax amount per record/season
 }
 
 enum Role {

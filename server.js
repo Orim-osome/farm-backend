@@ -122,14 +122,23 @@ app.post('/api/production', authenticate, async (req, res) => {
   const { year, season, productionTonnes } = req.body;
   try {
     const setting = await prisma.setting.findUnique({ where: { id: 'tax_rate' } });
-    if (!setting) return res.status(500).json({ error: "Tax rate not configured." });
+    if (!setting) return res.status(500).json({ error: "Tax settings not configured." });
 
-    const taxDue = parseFloat(productionTonnes) * setting.taxRatePerTonne;
+    // Use the fixed tax amount directly regardless of production tonnes
+    const taxDue = setting.fixedTaxAmount;
+
     const prod = await prisma.production.create({
-      data: { userId: req.user.id, year: parseInt(year), season, productionTonnes: parseFloat(productionTonnes), taxDue }
+      data: { 
+        userId: req.user.id, 
+        year: parseInt(year), 
+        season, 
+        productionTonnes: parseFloat(productionTonnes), 
+        taxDue 
+      }
     });
     res.json(prod);
   } catch (err) {
+    console.error("Production Error:", err);
     res.status(500).json({ error: "Failed to record production" });
   }
 });
@@ -194,42 +203,41 @@ app.get('/api/admin/reports', authenticate, async (req, res) => {
   }
 });
 
-app.put('/api/admin/tax-rate', async (req, res) => {
-  try {
-    console.log("Tax Rate Request Body:", req.body);
+app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
 
-    // Fallback to req.body.rate if taxRatePerTonne is not provided
-    const rawRate = req.body.taxRatePerTonne ?? req.body.rate;
+  try {
+    // Support various payload property names from frontend forms
+    const rawRate = req.body.fixedTaxAmount ?? req.body.taxRatePerTonne ?? req.body.rate;
 
     if (rawRate === undefined || rawRate === null || rawRate === "") {
-      return res.status(400).json({ error: "Tax rate value is required" });
+      return res.status(400).json({ error: "Tax amount value is required" });
     }
 
     const rate = parseFloat(rawRate);
 
     if (isNaN(rate)) {
-      return res.status(400).json({ error: "Tax rate must be a valid number" });
+      return res.status(400).json({ error: "Tax amount must be a valid number" });
     }
 
-    // Upsert setting row
     const existingSetting = await prisma.setting.findFirst();
 
     let updatedSetting;
     if (existingSetting) {
       updatedSetting = await prisma.setting.update({
         where: { id: existingSetting.id },
-        data: { taxRatePerTonne: rate },
+        data: { fixedTaxAmount: rate },
       });
     } else {
       updatedSetting = await prisma.setting.create({
-        data: { taxRatePerTonne: rate },
+        data: { fixedTaxAmount: rate },
       });
     }
 
-    res.json({ message: "Tax rate updated successfully", setting: updatedSetting });
+    res.json({ message: "Fixed tax amount updated successfully", setting: updatedSetting });
   } catch (err) {
-    console.error("Tax Rate Update Error:", err);
-    res.status(500).json({ error: "Failed to update tax rate", details: err.message });
+    console.error("Tax Update Error:", err);
+    res.status(500).json({ error: "Failed to update tax amount", details: err.message });
   }
 });
 
