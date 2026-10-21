@@ -11,7 +11,6 @@ const app = express();
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  // Dynamically match any .vercel.app domain (production or preview) or localhost
   if (origin && (origin.endsWith('.vercel.app') || origin.includes('localhost'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
@@ -22,7 +21,6 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  // Immediately answer preflight OPTIONS requests with 200 OK
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -67,7 +65,6 @@ app.post('/api/register', async (req, res) => {
     const nextNum = lastFarmer && lastFarmer.farmerId ? parseInt(lastFarmer.farmerId.split('-')[1]) + 1 : 1;
     const farmerId = `CRYAM-${nextNum.toString().padStart(4, '0')}`;
 
-    // Fix: Cast farmSizeHa string to Float, or set to null if empty/undefined
     const parsedFarmSize = farmSizeHa && !isNaN(parseFloat(farmSizeHa)) 
       ? parseFloat(farmSizeHa) 
       : null;
@@ -118,14 +115,20 @@ app.get('/api/profile', authenticate, async (req, res) => {
   }
 });
 
+// FIXED: Production route using fixedTaxAmount with fallback creation if settings row is empty
 app.post('/api/production', authenticate, async (req, res) => {
   const { year, season, productionTonnes } = req.body;
   try {
-    const setting = await prisma.setting.findUnique({ where: { id: 'tax_rate' } });
-    if (!setting) return res.status(500).json({ error: "Tax settings not configured." });
+    let setting = await prisma.setting.findFirst();
+    
+    // Auto-initialize settings row if it doesn't exist yet
+    if (!setting) {
+      setting = await prisma.setting.create({
+        data: { id: 'tax_rate', fixedTaxAmount: 5000 }
+      });
+    }
 
-    // Use the fixed tax amount directly regardless of production tonnes
-    const taxDue = setting.fixedTaxAmount;
+    const taxDue = setting.fixedTaxAmount ?? 5000;
 
     const prod = await prisma.production.create({
       data: { 
@@ -139,7 +142,7 @@ app.post('/api/production', authenticate, async (req, res) => {
     res.json(prod);
   } catch (err) {
     console.error("Production Error:", err);
-    res.status(500).json({ error: "Failed to record production" });
+    res.status(500).json({ error: "Failed to record production", details: err.message });
   }
 });
 
@@ -159,11 +162,16 @@ app.post('/api/payment', authenticate, async (req, res) => {
   const { productionId, amount, reference } = req.body;
   try {
     const payment = await prisma.payment.create({
-      data: { productionId, amount: parseFloat(amount), reference: reference || null }
+      data: { 
+        productionId, 
+        amount: parseFloat(amount), 
+        reference: reference || `REF-${Date.now()}` 
+      }
     });
     res.json(payment);
   } catch (err) {
-    res.status(500).json({ error: "Payment failed" });
+    console.error("Payment Error:", err);
+    res.status(500).json({ error: "Payment failed", details: err.message });
   }
 });
 
@@ -203,11 +211,11 @@ app.get('/api/admin/reports', authenticate, async (req, res) => {
   }
 });
 
+// FIXED: Admin tax update route supporting fixedTaxAmount
 app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
   if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
 
   try {
-    // Support various payload property names from frontend forms
     const rawRate = req.body.fixedTaxAmount ?? req.body.taxRatePerTonne ?? req.body.rate;
 
     if (rawRate === undefined || rawRate === null || rawRate === "") {
@@ -230,13 +238,13 @@ app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
       });
     } else {
       updatedSetting = await prisma.setting.create({
-        data: { fixedTaxAmount: rate },
+        data: { id: 'tax_rate', fixedTaxAmount: rate },
       });
     }
 
     res.json({ message: "Fixed tax amount updated successfully", setting: updatedSetting });
   } catch (err) {
-    console.error("Tax Update Error:", err);
+    console.error("Tax Rate Update Error:", err);
     res.status(500).json({ error: "Failed to update tax amount", details: err.message });
   }
 });
