@@ -115,18 +115,15 @@ app.get('/api/profile', authenticate, async (req, res) => {
   }
 });
 
-// FIXED: Production route using fixedTaxAmount with fallback creation if settings row is empty
+// FIXED: Production route using atomic upsert to prevent 500 errors
 app.post('/api/production', authenticate, async (req, res) => {
   const { year, season, productionTonnes } = req.body;
   try {
-    let setting = await prisma.setting.findFirst();
-    
-    // Auto-initialize settings row if it doesn't exist yet
-    if (!setting) {
-      setting = await prisma.setting.create({
-        data: { id: 'tax_rate', fixedTaxAmount: 5000 }
-      });
-    }
+    const setting = await prisma.setting.upsert({
+      where: { id: 'tax_rate' },
+      update: {},
+      create: { id: 'tax_rate', fixedTaxAmount: 5000 }
+    });
 
     const taxDue = setting.fixedTaxAmount ?? 5000;
 
@@ -211,7 +208,7 @@ app.get('/api/admin/reports', authenticate, async (req, res) => {
   }
 });
 
-// FIXED: Admin tax update route supporting fixedTaxAmount
+// FIXED: Admin tax update route using atomic upsert to prevent 500 errors
 app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
   if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
 
@@ -228,19 +225,11 @@ app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
       return res.status(400).json({ error: "Tax amount must be a valid number" });
     }
 
-    const existingSetting = await prisma.setting.findFirst();
-
-    let updatedSetting;
-    if (existingSetting) {
-      updatedSetting = await prisma.setting.update({
-        where: { id: existingSetting.id },
-        data: { fixedTaxAmount: rate },
-      });
-    } else {
-      updatedSetting = await prisma.setting.create({
-        data: { id: 'tax_rate', fixedTaxAmount: rate },
-      });
-    }
+    const updatedSetting = await prisma.setting.upsert({
+      where: { id: 'tax_rate' },
+      update: { fixedTaxAmount: rate },
+      create: { id: 'tax_rate', fixedTaxAmount: rate },
+    });
 
     res.json({ message: "Fixed tax amount updated successfully", setting: updatedSetting });
   } catch (err) {
