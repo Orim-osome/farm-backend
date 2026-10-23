@@ -238,6 +238,22 @@ app.put('/api/admin/tax-rate', authenticate, async (req, res) => {
   }
 });
 
+// GET current fixed tax rate setting
+app.get('/api/admin/tax-rate', authenticate, async (req, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const setting = await prisma.setting.upsert({
+      where: { id: 'tax_rate' },
+      update: {},
+      create: { id: 'tax_rate', fixedTaxAmount: 840 }
+    });
+    res.json(setting);
+  } catch (err) {
+    console.error("Fetch Tax Rate Error:", err);
+    res.status(500).json({ error: "Failed to fetch tax rate" });
+  }
+});
+
 app.get('/api/admin/payments', authenticate, async (req, res) => {
   if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
   try {
