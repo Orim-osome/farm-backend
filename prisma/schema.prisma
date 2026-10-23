@@ -45,7 +45,7 @@ model Payment {
 
 model Setting {
   id             String @id @default("tax_rate")
-  fixedTaxAmount Float  @default(5000)  // Fixed NGN tax amount per record/season
+  fixedTaxAmount Float  @default(840)  // Fixed NGN tax amount per record/season
 }
 
 enum Role {
