@@ -250,7 +250,7 @@ app.get('/api/admin/tax-rate', authenticate, async (req, res) => {
     const setting = await prisma.setting.upsert({
       where: { id: 'tax_rate' },
       update: {},
-      create: { id: 'tax_rate', fixedTaxAmount: 840 }
+      create: { id: 'tax_rate', fixedTaxAmount: 4500 }
     });
     res.json(setting);
   } catch (err) {
