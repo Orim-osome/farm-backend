@@ -53,7 +53,7 @@ const authenticate = (req, res, next) => {
 
 app.post('/api/register', async (req, res) => {
   try {
-    const { fullName, phone, email, password, lga, village, farmSizeHa } = req.body;
+    const { fullName, phone, email, password, lga, village, farmSizeHa, yamsProduced } = req.body;
     
     if (!phone || !password || !fullName) {
       return res.status(400).json({ error: "Missing required fields (fullName, phone, password)" });
@@ -69,6 +69,10 @@ app.post('/api/register', async (req, res) => {
       ? parseFloat(farmSizeHa) 
       : null;
 
+    const parsedYamsProduced = yamsProduced && !isNaN(parseFloat(yamsProduced))
+      ? parseFloat(yamsProduced)
+      : null;
+
     const user = await prisma.user.create({
       data: { 
         farmerId, 
@@ -79,7 +83,8 @@ app.post('/api/register', async (req, res) => {
         role: 'FARMER', 
         lga: lga || null, 
         village: village || null, 
-        farmSizeHa: parsedFarmSize 
+        farmSizeHa: parsedFarmSize,
+        yamsProduced: parsedYamsProduced
       }
     });
 

@@ -18,6 +18,7 @@ model User {
   lga          String
   village      String
   farmSizeHa   Float?
+  yamsProduced Float?
   createdAt    DateTime @default(now())
   productions  Production[]
 }
