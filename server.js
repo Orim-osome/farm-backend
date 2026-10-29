@@ -120,24 +120,28 @@ app.get('/api/profile', authenticate, async (req, res) => {
   }
 });
 
-// FIXED: Production route using atomic upsert to prevent 500 errors
+// FIXED: Proportional production route (Tonnes × Tax Rate per Tonne)
 app.post('/api/production', authenticate, async (req, res) => {
   const { year, season, productionTonnes } = req.body;
   try {
     const setting = await prisma.setting.upsert({
       where: { id: 'tax_rate' },
       update: {},
-      create: { id: 'tax_rate', fixedTaxAmount: 5000 }
+      create: { id: 'tax_rate', fixedTaxAmount: 1000 }
     });
 
-    const taxDue = setting.fixedTaxAmount ?? 5000;
+    const taxRatePerTonne = setting.fixedTaxAmount ?? 1000;
+    const tonnes = parseFloat(productionTonnes) || 0;
+    
+    // Proportional calculation: Tonnes * Tax Rate per Tonne
+    const taxDue = tonnes * taxRatePerTonne;
 
     const prod = await prisma.production.create({
       data: { 
         userId: req.user.id, 
         year: parseInt(year), 
         season, 
-        productionTonnes: parseFloat(productionTonnes), 
+        productionTonnes: tonnes, 
         taxDue 
       }
     });
@@ -145,6 +149,22 @@ app.post('/api/production', authenticate, async (req, res) => {
   } catch (err) {
     console.error("Production Error:", err);
     res.status(500).json({ error: "Failed to record production", details: err.message });
+  }
+});
+
+// FIXED: Include yamsProduced in admin farmers list
+app.get('/api/admin/farmers', authenticate, async (req, res) => {
+  if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const farmers = await prisma.user.findMany({ 
+      where: { role: 'FARMER' },
+      include: {
+        productions: true // To compute or show their production data if needed
+      }
+    });
+    res.json(farmers);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch farmers' });
   }
 });
 
